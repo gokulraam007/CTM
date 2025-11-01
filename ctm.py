@@ -387,7 +387,7 @@ def create_pdf_report(total_cell_power, module_pmax, module_efficiency, df_losse
 
     # CURRENT DATE AND TIME AT REPORT GENERATION (DOWNLOAD TIME)
     current_datetime = datetime.now()
-    report_date = f"Report Generated: {current_datetime.strftime('%d %B %Y | %H:%M:%S IST')}"
+    report_date = f"Report Generated: {current_datetime.strftime('%d %B %Y')}"
     story.append(Paragraph(report_date, body_style))
     story.append(Spacer(1, 0.2*inch))
 
