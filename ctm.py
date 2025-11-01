@@ -67,29 +67,22 @@ module_area = st.sidebar.number_input("Module Area (m²)", min_value=2.0, max_va
 cell_length = st.sidebar.number_input("Cell Length (mm)", min_value=180.0, max_value=185.0, value=182.2, step=0.1, help="Half-cut: 182.2mm")
 cell_width = st.sidebar.number_input("Cell Width (mm)", min_value=85.0, max_value=95.0, value=91.1, step=0.1, help="Half-cut: 91.1mm")
 
-st.sidebar.subheader("3. Module Power Output")
-module_pmax_input = st.sidebar.number_input("Module Pmax (Wp)", min_value=500.0, max_value=650.0, value=590.0, step=5.0, help="Module peak power")
-module_efficiency_input = st.sidebar.number_input("Module Efficiency (%)", min_value=20.0, max_value=24.0, value=22.84, step=0.1, help="Module efficiency at STC")
+st.sidebar.subheader("3. Module Efficiency Target")
+module_efficiency_target = st.sidebar.number_input("Target Module Efficiency (%)", min_value=20.0, max_value=24.0, value=22.84, step=0.1, help="Module efficiency at STC")
 
-st.sidebar.subheader("4. Module Electrical Parameters")
-module_voc_input = st.sidebar.number_input("Voc (V)", min_value=45.0, max_value=55.0, value=51.86, step=0.1, help="Open circuit voltage")
-module_isc_input = st.sidebar.number_input("Isc (A)", min_value=12.0, max_value=16.0, value=14.49, step=0.1, help="Short circuit current")
-module_vmpp_input = st.sidebar.number_input("Vmpp (V)", min_value=35.0, max_value=50.0, value=42.88, step=0.1, help="Voltage at MPP")
-module_impp_input = st.sidebar.number_input("Impp (A)", min_value=10.0, max_value=15.0, value=13.76, step=0.1, help="Current at MPP")
-
-st.sidebar.subheader("5. Optical Loss Parameters")
+st.sidebar.subheader("4. Optical Loss Parameters")
 glass_transmission = st.sidebar.slider("Glass Transmission (%)", 88.0, 96.0, 91.5, 0.5, help="AR-coated: 91.5%")
 eva_transmission = st.sidebar.slider("EVA Transmission (%)", 94.0, 98.0, 96.5, 0.5, help="UV-stable: 96.5%")
 
-st.sidebar.subheader("6. Resistive Loss Parameters")
+st.sidebar.subheader("5. Resistive Loss Parameters")
 num_busbars = st.sidebar.selectbox("Number of Busbars", [3, 5, 9, 12, 16], index=3, help="MBB: 12 busbars")
 ribbon_width = st.sidebar.number_input("Ribbon Width (mm)", min_value=0.8, max_value=2.5, value=1.5, step=0.1)
 ribbon_thickness = st.sidebar.number_input("Ribbon Thickness (mm)", min_value=0.15, max_value=0.35, value=0.25, step=0.05)
 
-st.sidebar.subheader("7. Mismatch Parameters")
+st.sidebar.subheader("6. Mismatch Parameters")
 cell_binning_tolerance = st.sidebar.slider("Cell Binning Tolerance (±%)", 0.0, 5.0, 1.5, 0.5, help="Tight sorting")
 
-st.sidebar.subheader("8. Additional Parameters")
+st.sidebar.subheader("7. Additional Parameters")
 junction_box_loss = st.sidebar.slider("Junction Box & Cable Loss (%)", 0.1, 2.0, 0.35, 0.1)
 annual_irradiance = st.sidebar.number_input("Annual Solar Irradiance (kWh/m²/year)", min_value=1000.0, max_value=2500.0, value=1500.0, step=50.0, help="Location specific")
 
@@ -98,14 +91,7 @@ annual_irradiance = st.sidebar.number_input("Annual Solar Irradiance (kWh/m²/ye
 cell_area_m2 = (cell_length * cell_width) / 1e6
 cell_area_cm2 = (cell_length * cell_width) / 100
 
-# DYNAMIC ELECTRICAL PARAMETERS - Changes based on user input
-module_pmax = module_pmax_input
-module_efficiency = module_efficiency_input
-module_voc = module_voc_input
-module_isc = module_isc_input
-module_vmpp = module_vmpp_input
-module_impp = module_impp_input
-
+# Calculate total cell power
 total_cell_power = cell_power * num_cells
 
 # Calculate geometric loss
@@ -134,12 +120,35 @@ mismatch_loss = 0.25 + (cell_binning_tolerance / 2.0) * 0.15
 
 jb_cable_loss = junction_box_loss
 
-# CALCULATE CTM LOSS BASED ON USER INPUT MODULE PMAX
+# Calculate module power based on efficiency target
+module_pmax = (module_area * 1000 * module_efficiency_target) / 100
+
+# Calculate CTM loss
 total_ctm_loss = ((total_cell_power - module_pmax) / total_cell_power) * 100
 total_ctm_loss = max(1.0, min(total_ctm_loss, 10.0))
 
 ctm_ratio = 1 - (total_ctm_loss / 100)
-module_power = total_cell_power * ctm_ratio
+
+# DYNAMIC ELECTRICAL PARAMETERS - Based on module power and efficiency
+# Reference ratios from 590W baseline at 22.84% efficiency
+# Voc/Pmax ratio = 51.86/590 = 0.0879
+# Isc/Pmax ratio = 14.49/590 = 0.0245
+# Vmpp/Voc ratio = 42.88/51.86 = 0.826
+# Impp/Isc ratio = 13.76/14.49 = 0.950
+
+voc_pmax_ratio = 0.0879
+isc_pmax_ratio = 0.0245
+vmpp_voc_ratio = 0.826
+impp_isc_ratio = 0.950
+
+# CALCULATE DYNAMIC VALUES BASED ON MODULE PMAX
+module_voc = module_pmax * voc_pmax_ratio  # Updates when module power changes
+module_isc = module_pmax * isc_pmax_ratio  # Updates when module power changes
+module_vmpp = module_voc * vmpp_voc_ratio  # Updates based on Voc
+module_impp = module_isc * impp_isc_ratio  # Updates based on Isc
+
+# Calculate efficiency
+module_efficiency = (module_pmax / (module_area * 1000)) * 100
 
 annual_energy_total = (module_pmax / 1000) * annual_irradiance
 annual_energy_loss = annual_energy_total * (total_ctm_loss / 100)
@@ -178,7 +187,7 @@ with col4:
 
 st.markdown("---")
 
-st.markdown("## Module Electrical Parameters (STC) - DYNAMIC")
+st.markdown("## Module Electrical Parameters (STC)")
 
 col_elec1, col_elec2, col_elec3, col_elec4, col_elec5 = st.columns(5)
 
