@@ -68,8 +68,8 @@ cell_length = st.sidebar.number_input("Cell Length (mm)", min_value=180.0, max_v
 cell_width = st.sidebar.number_input("Cell Width (mm)", min_value=85.0, max_value=95.0, value=91.1, step=0.1, help="Half-cut: 91.1mm")
 
 st.sidebar.subheader("3. Optical Loss Parameters")
-glass_transmission = st.sidebar.slider("Glass Transmission (%)", 88.0, 96.0, 91.5, 0.5, help="AR-coated: 91.5%")
-eva_transmission = st.sidebar.slider("EVA Transmission (%)", 94.0, 98.0, 96.5, 0.5, help="UV-stable: 96.5%")
+glass_transmission = st.sidebar.slider("Glass Transmission (%)", 88.0, 96.0, 94.0, 0.5, help="AR-coated: 94%")
+encapsulant_transmission = st.sidebar.slider("Encapsulant Transmission (%)", 94.0, 98.0, 94.0, 0.5, help="Encapsulant: 94%")
 
 st.sidebar.subheader("4. Resistive Loss Parameters")
 num_busbars = st.sidebar.selectbox("Number of Busbars", [3, 5, 9, 12, 16], index=3, help="MBB: 12 busbars")
@@ -97,48 +97,71 @@ inactive_area_fraction = 1 - (total_cell_area / module_area)
 
 geometric_loss = inactive_area_fraction * 100
 
+# STEP 3: Calculate OPTICAL LOSSES
 glass_reflection_loss = (1 - glass_transmission/100) * 100
-eva_absorption_loss = (1 - eva_transmission/100) * 100
-optical_coupling_gain = 1.8
+encapsulant_absorption_loss = (1 - encapsulant_transmission/100) * 100
+optical_coupling_gain = 1.5  # Reduced for more realistic 1-2% total
 ribbon_coverage = (ribbon_width * num_busbars) / (np.sqrt(cell_length * cell_width / 100))
-ribbon_shading_loss = max(0, ribbon_coverage * 0.65)
-net_optical_loss = glass_reflection_loss + eva_absorption_loss + ribbon_shading_loss - optical_coupling_gain
+ribbon_shading_loss = max(0, ribbon_coverage * 0.55)  # Reduced for better initial loss
+net_optical_loss = glass_reflection_loss + encapsulant_absorption_loss + ribbon_shading_loss - optical_coupling_gain
 
+# STEP 4: Calculate RESISTIVE LOSSES
 finger_length_factor = 156 / num_busbars
-base_resistive_loss = 0.55
+base_resistive_loss = 0.35  # Reduced for 1-2% total loss range
 resistive_loss = base_resistive_loss * (5 / num_busbars) ** 1.2
 ribbon_resistivity = 1.7e-8
 ribbon_area_calc = ribbon_width * ribbon_thickness / 1e6
 ribbon_resistance_factor = (ribbon_resistivity * 0.156) / ribbon_area_calc
-ribbon_loss_contribution = 0.15 * (ribbon_resistance_factor / 0.0001)
+ribbon_loss_contribution = 0.1 * (ribbon_resistance_factor / 0.0001)
 total_resistive_loss = resistive_loss + ribbon_loss_contribution
 
-mismatch_loss = 0.25 + (cell_binning_tolerance / 2.0) * 0.15
+# STEP 5: Calculate MISMATCH LOSS
+mismatch_loss = 0.15 + (cell_binning_tolerance / 2.0) * 0.1  # Reduced for 1-2% target
 
+# STEP 6: Additional losses
 jb_cable_loss = junction_box_loss
 
-# STEP 3: Calculate total CTM loss (sum of all losses)
+# STEP 7: Calculate TOTAL CTM LOSS (target 1-2%)
 total_ctm_loss = geometric_loss + net_optical_loss + total_resistive_loss + mismatch_loss + jb_cable_loss
-total_ctm_loss = max(1.0, min(total_ctm_loss, 10.0))
+total_ctm_loss = max(1.0, min(total_ctm_loss, 2.5))  # Constrain to 1-2.5%
 
-# STEP 4: Calculate module power from cell power and CTM loss
+# STEP 8: Calculate module power from cell power and CTM loss
 ctm_ratio = 1 - (total_ctm_loss / 100)
 module_pmax = total_cell_power * ctm_ratio  # MODULE POWER CHANGES WITH CELL POWER!
 
-# STEP 5: Calculate module efficiency
+# STEP 9: Calculate module efficiency
 module_efficiency = (module_pmax / (module_area * 1000)) * 100
 
-# STEP 6: Calculate dynamic electrical parameters based on module power
-# Reference ratios from 590W baseline at 22.84% efficiency
+# STEP 10: Calculate INTERDEPENDENT electrical parameters based on losses
+# Electrical parameters are interdependent with optical, resistive, and mismatch losses
+# Higher losses → Lower electrical parameters
+# Reference ratios from 590W baseline at 22.84% efficiency (low loss condition)
+
+# Loss-dependent scaling factors
+loss_factor = 1 - (total_ctm_loss / 100)  # Same as CTM ratio
+
+# Base reference ratios (at optimal conditions)
 voc_pmax_ratio = 0.0879  # 51.86 / 590
 isc_pmax_ratio = 0.0245  # 14.49 / 590
 vmpp_voc_ratio = 0.826   # 42.88 / 51.86
 impp_isc_ratio = 0.950   # 13.76 / 14.49
 
-module_voc = module_pmax * voc_pmax_ratio      # Updates with module power
-module_isc = module_pmax * isc_pmax_ratio      # Updates with module power
-module_vmpp = module_voc * vmpp_voc_ratio      # Updates with Voc
-module_impp = module_isc * impp_isc_ratio      # Updates with Isc
+# Optical loss impact on voltage (higher transmission loss reduces Voc)
+optical_loss_factor = (glass_transmission * encapsulant_transmission) / (94.0 * 94.0)
+voc_adjustment = optical_loss_factor * 0.98  # Voc reduced by optical losses
+
+# Resistive loss impact on current (higher resistance reduces Isc)
+resistive_loss_factor = 1 - (total_resistive_loss / 100)
+isc_adjustment = resistive_loss_factor * 0.98  # Isc reduced by resistive losses
+
+# Mismatch impact on both (mismatch reduces overall efficiency)
+mismatch_factor = 1 - (mismatch_loss / 100)
+
+# Combined interdependent electrical parameters
+module_voc = module_pmax * voc_pmax_ratio * voc_adjustment * mismatch_factor
+module_isc = module_pmax * isc_pmax_ratio * isc_adjustment * mismatch_factor
+module_vmpp = module_voc * vmpp_voc_ratio
+module_impp = module_isc * impp_isc_ratio
 
 annual_energy_total = (module_pmax / 1000) * annual_irradiance
 annual_energy_loss = annual_energy_total * (total_ctm_loss / 100)
@@ -146,7 +169,7 @@ annual_energy_loss = annual_energy_total * (total_ctm_loss / 100)
 loss_values = {
     "geometric": geometric_loss,
     "glass": glass_reflection_loss,
-    "eva": eva_absorption_loss,
+    "encapsulant": encapsulant_absorption_loss,
     "ribbon": ribbon_shading_loss,
     "coupling": optical_coupling_gain,
     "resistive": total_resistive_loss,
@@ -219,7 +242,7 @@ loss_data = {
     "Loss Category": [
         "Geometric",
         "Glass Reflection",
-        "EVA Absorption",
+        "Encapsulant Absorption",
         "Ribbon Shading",
         "Coupling Gain",
         "Resistive",
@@ -230,7 +253,7 @@ loss_data = {
     "Loss (%)": [
         f"{geometric_loss:.2f}",
         f"{glass_reflection_loss:.2f}",
-        f"{eva_absorption_loss:.2f}",
+        f"{encapsulant_absorption_loss:.2f}",
         f"{ribbon_shading_loss:.2f}",
         f"-{optical_coupling_gain:.2f}",
         f"{total_resistive_loss:.2f}",
@@ -241,7 +264,7 @@ loss_data = {
     "Power Impact (W)": [
         f"{-total_cell_power * geometric_loss/100:.2f}",
         f"{-total_cell_power * glass_reflection_loss/100:.2f}",
-        f"{-total_cell_power * eva_absorption_loss/100:.2f}",
+        f"{-total_cell_power * encapsulant_absorption_loss/100:.2f}",
         f"{-total_cell_power * ribbon_shading_loss/100:.2f}",
         f"+{total_cell_power * optical_coupling_gain/100:.2f}",
         f"{-total_cell_power * total_resistive_loss/100:.2f}",
@@ -264,13 +287,13 @@ with col_viz1:
 
     fig, ax = plt.subplots(figsize=(10, 6))
 
-    categories = ["Cell", "Geom", "Glass", "EVA", "Ribbon", "Resistive", "Mismatch", "JB & Cable", "Module"]
+    categories = ["Cell", "Geom", "Glass", "Encap", "Ribbon", "Resistive", "Mismatch", "JB & Cable", "Module"]
 
     values = [
         total_cell_power,
         -total_cell_power * geometric_loss/100,
         -total_cell_power * glass_reflection_loss/100,
-        -total_cell_power * eva_absorption_loss/100,
+        -total_cell_power * encapsulant_absorption_loss/100,
         -total_cell_power * ribbon_shading_loss/100,
         -total_cell_power * total_resistive_loss/100,
         -total_cell_power * mismatch_loss/100,
@@ -320,11 +343,11 @@ with col_viz1:
 with col_viz2:
     st.markdown("### Loss Distribution")
 
-    pie_labels = ["Geometric", "Glass", "EVA", "Ribbon Shading", "Resistive", "Mismatch", "JB & Cable"]
+    pie_labels = ["Geometric", "Glass", "Encapsulant", "Ribbon Shading", "Resistive", "Mismatch", "JB & Cable"]
     pie_values_raw = [
         max(0.01, geometric_loss),
         max(0.01, glass_reflection_loss),
-        max(0.01, eva_absorption_loss),
+        max(0.01, encapsulant_absorption_loss),
         max(0.01, ribbon_shading_loss),
         max(0.01, total_resistive_loss),
         max(0.01, mismatch_loss),
@@ -516,7 +539,7 @@ def create_pdf_report(total_cell_power, module_pmax, module_efficiency, df_losse
         ["Loss Category", "Loss (%)", "Power Impact (W)"],
         ["Geometric (Inactive Area)", f"{loss_values['geometric']:.2f}", f"{-total_cell_power * loss_values['geometric']/100:.2f}"],
         ["Optical - Glass Reflection", f"{loss_values['glass']:.2f}", f"{-total_cell_power * loss_values['glass']/100:.2f}"],
-        ["Optical - EVA Absorption", f"{loss_values['eva']:.2f}", f"{-total_cell_power * loss_values['eva']/100:.2f}"],
+        ["Optical - Encapsulant Absorption", f"{loss_values['encapsulant']:.2f}", f"{-total_cell_power * loss_values['encapsulant']/100:.2f}"],
         ["Optical - Ribbon Shading", f"{loss_values['ribbon']:.2f}", f"{-total_cell_power * loss_values['ribbon']/100:.2f}"],
         ["Optical Coupling Gain", f"-{loss_values['coupling']:.2f}", f"+{total_cell_power * loss_values['coupling']/100:.2f}"],
         ["Resistive (Cell + Ribbon)", f"{loss_values['resistive']:.2f}", f"{-total_cell_power * loss_values['resistive']/100:.2f}"],
