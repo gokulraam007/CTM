@@ -11,14 +11,12 @@ from reportlab.lib.units import inch
 from reportlab.platypus import SimpleDocTemplate, Table, TableStyle, Paragraph, Spacer, PageBreak
 from reportlab.lib.enums import TA_CENTER, TA_JUSTIFY
 
-# Configure page layout
 st.set_page_config(
     page_title="CTM Loss Calculator - 144 Half-Cut Cell Modules",
     layout="wide",
     initial_sidebar_state="expanded"
 )
 
-# Custom responsive styling
 st.markdown("""
 <style>
     * {
@@ -50,12 +48,10 @@ st.markdown("""
 </style>
 """, unsafe_allow_html=True)
 
-# Title
 st.markdown("<h1 class='title-main'>CTM Loss Calculator</h1>", unsafe_allow_html=True)
 st.markdown("<h3 style='text-align: center; color: #555;'>Luminous Power Technologies</h3>", unsafe_allow_html=True)
 st.markdown("<h4 style='text-align: center; color: #777;'>144 Half-Cut Cell TOPCon Modules</h4>", unsafe_allow_html=True)
 
-# Sidebar configuration
 st.sidebar.header("Input Configuration")
 
 if st.sidebar.button("Reset to Default Values", use_container_width=True):
@@ -66,66 +62,60 @@ cell_power = st.sidebar.number_input("Cell Power (Wp)", min_value=2.0, max_value
 cell_efficiency = st.sidebar.number_input("Cell Efficiency (%)", min_value=20.0, max_value=26.0, value=24.7, step=0.1, help="TOPCon: 24.7%")
 num_cells = st.sidebar.number_input("Number of Cells", min_value=100, max_value=144, value=144, step=2, help="144 half-cut cells")
 
-# Module Specifications
 st.sidebar.subheader("2. Module Specifications")
 module_area = st.sidebar.number_input("Module Area (m²)", min_value=2.0, max_value=3.0, value=2.586, step=0.01, help="2278mm x 1134mm x 33mm")
 cell_length = st.sidebar.number_input("Cell Length (mm)", min_value=180.0, max_value=185.0, value=182.2, step=0.1, help="Half-cut: 182.2mm")
 cell_width = st.sidebar.number_input("Cell Width (mm)", min_value=85.0, max_value=95.0, value=91.1, step=0.1, help="Half-cut: 91.1mm")
 
-# Loss Parameters
 st.sidebar.subheader("3. Optical Loss Parameters")
 glass_transmission = st.sidebar.slider("Glass Transmission (%)", 88.0, 96.0, 91.5, 0.5, help="AR-coated: 91.5%")
 eva_transmission = st.sidebar.slider("EVA Transmission (%)", 94.0, 98.0, 96.5, 0.5, help="UV-stable: 96.5%")
 
-# Resistive Loss Parameters
 st.sidebar.subheader("4. Resistive Loss Parameters")
 num_busbars = st.sidebar.selectbox("Number of Busbars", [3, 5, 9, 12, 16], index=3, help="MBB: 12 busbars")
 ribbon_width = st.sidebar.number_input("Ribbon Width (mm)", min_value=0.8, max_value=2.5, value=1.5, step=0.1)
 ribbon_thickness = st.sidebar.number_input("Ribbon Thickness (mm)", min_value=0.15, max_value=0.35, value=0.25, step=0.05)
 
-# Mismatch Parameters
 st.sidebar.subheader("5. Mismatch Parameters")
 cell_binning_tolerance = st.sidebar.slider("Cell Binning Tolerance (±%)", 0.0, 5.0, 1.5, 0.5, help="Tight sorting")
 
-# Additional Parameters
 st.sidebar.subheader("6. Additional Parameters")
 junction_box_loss = st.sidebar.slider("Junction Box & Cable Loss (%)", 0.1, 2.0, 0.35, 0.1)
 annual_irradiance = st.sidebar.number_input("Annual Solar Irradiance (kWh/m²/year)", min_value=1000.0, max_value=2500.0, value=1500.0, step=50.0, help="Location specific")
 
 # ====================== CALCULATIONS ======================
 
-# Cell area calculation
 cell_area_m2 = (cell_length * cell_width) / 1e6
 cell_area_cm2 = (cell_length * cell_width) / 100
 
-# Module electrical parameters (144 half-cut cells)
-# Configuration: 12 parallel strings of 12 cells each
+# Half-cut cell electrical parameters (CORRECTED)
+# For half-cut cells: Voltage doubles, Current halves
 num_parallel_strings = 12
 cells_per_string = num_cells // num_parallel_strings
 
-# Reference electrical parameters at STC (from 595W datasheet)
-# Voc per series string (12 cells in series)
-voc_per_cell = 0.7225  # ~51.2V / 12 cells for 595W module
-module_voc = voc_per_cell * cells_per_string
+# Full cell reference (from datasheet for full cell)
+full_cell_voc = 0.72  # Full cell Voc
+full_cell_isc = 5.95  # Full cell Isc
 
-# Isc for the module (12 parallel strings, each string has Isc)
-isc_per_string = 14.25  # From 595W datasheet
-module_isc = isc_per_string
+# Half-cut cell parameters
+half_cut_cell_voc = full_cell_voc * 2  # Double voltage
+half_cut_cell_isc = full_cell_isc / 2  # Half current
 
-# Fill Factor
+# Module parameters at STC
+module_voc = half_cut_cell_voc * cells_per_string
+module_isc = half_cut_cell_isc * num_parallel_strings
+
 ff_module = 82.5  # TOPCon typical
 
-# Vmpp and Impp calculation
-module_vmpp = module_voc * 0.87  # Typical 87% of Voc
-module_impp = isc_per_string * 0.96  # Typical 96% of Isc
+module_vmpp = module_voc * 0.87
+module_impp = module_isc * 0.96
 
 total_cell_power = cell_power * num_cells
 
-# Calculate geometric loss based on actual cell dimensions
+# Geometric loss
 total_cell_area = num_cells * cell_area_m2
 inactive_area_fraction = 1 - (total_cell_area / module_area)
 
-# LOSS CALCULATIONS
 geometric_loss = inactive_area_fraction * 100
 
 glass_reflection_loss = (1 - glass_transmission/100) * 100
@@ -135,7 +125,6 @@ ribbon_coverage = (ribbon_width * num_busbars) / (np.sqrt(cell_length * cell_wid
 ribbon_shading_loss = max(0, ribbon_coverage * 0.65)
 net_optical_loss = glass_reflection_loss + eva_absorption_loss + ribbon_shading_loss - optical_coupling_gain
 
-# Resistive losses - calibrated
 finger_length_factor = 156 / num_busbars
 base_resistive_loss = 0.55
 resistive_loss = base_resistive_loss * (5 / num_busbars) ** 1.2
@@ -145,29 +134,22 @@ ribbon_resistance_factor = (ribbon_resistivity * 0.156) / ribbon_area_calc
 ribbon_loss_contribution = 0.15 * (ribbon_resistance_factor / 0.0001)
 total_resistive_loss = resistive_loss + ribbon_loss_contribution
 
-# Mismatch loss
 mismatch_loss = 0.25 + (cell_binning_tolerance / 2.0) * 0.15
 
-# Additional losses
 jb_cable_loss = junction_box_loss
 
-# TOTAL CTM LOSS - calibrated for 2-4% range
 total_ctm_loss = geometric_loss + net_optical_loss + total_resistive_loss + mismatch_loss + jb_cable_loss
 total_ctm_loss = max(1.8, min(total_ctm_loss, 4.5))
 
-# Module power calculation
 ctm_ratio = 1 - (total_ctm_loss / 100)
 module_power = total_cell_power * ctm_ratio
 module_efficiency = (module_power / (module_area * 1000)) * 100
 
-# Electrical output at STC
 module_pmax = module_power
 
-# Annual energy loss calculation
-annual_energy_total = (module_power / 1000) * annual_irradiance  # kWh/year
+annual_energy_total = (module_power / 1000) * annual_irradiance
 annual_energy_loss = annual_energy_total * (total_ctm_loss / 100)
 
-# Store values for charts and PDF
 loss_values = {
     "geometric": geometric_loss,
     "glass": glass_reflection_loss,
@@ -202,7 +184,6 @@ with col4:
 
 st.markdown("---")
 
-# Electrical Parameters Output
 st.markdown("## Module Electrical Parameters (STC)")
 
 col_elec1, col_elec2, col_elec3, col_elec4, col_elec5 = st.columns(5)
@@ -224,7 +205,6 @@ with col_elec5:
 
 st.markdown("---")
 
-# Annual Energy Loss
 st.markdown("## Annual Energy Analysis")
 
 col_energy1, col_energy2, col_energy3 = st.columns(3)
@@ -240,7 +220,6 @@ with col_energy3:
 
 st.markdown("---")
 
-# Loss Breakdown Table
 st.markdown("## Loss Breakdown Analysis")
 
 loss_data = {
@@ -284,15 +263,16 @@ st.dataframe(df_losses, use_container_width=True, hide_index=True)
 
 st.markdown("---")
 
-# VISUALIZATIONS
+# VISUALIZATIONS - CORRECTED
 col_viz1, col_viz2 = st.columns([1, 1])
 
 with col_viz1:
     st.markdown("### Power Waterfall Chart")
 
-    fig, ax = plt.subplots(figsize=(8, 5))
+    fig, ax = plt.subplots(figsize=(10, 6))
 
-    categories = ["Cell", "Geom", "Glass", "EVA", "Ribbon", "Gain", "Resist", "Match", "JB", "Module"]
+    # CORRECTED: Power should only decrease or stay same (no increase from losses)
+    categories = ["Cell", "Geom", "Glass", "EVA", "Ribbon", "Resistive", "Mismatch", "JB & Cable", "Module"]
 
     values = [
         total_cell_power,
@@ -300,7 +280,6 @@ with col_viz1:
         -total_cell_power * glass_reflection_loss/100,
         -total_cell_power * eva_absorption_loss/100,
         -total_cell_power * ribbon_shading_loss/100,
-        total_cell_power * optical_coupling_gain/100,
         -total_cell_power * total_resistive_loss/100,
         -total_cell_power * mismatch_loss/100,
         -total_cell_power * jb_cable_loss/100,
@@ -312,7 +291,7 @@ with col_viz1:
         cumulative.append(cumulative[-1] + values[i])
     cumulative.append(module_power)
 
-    colors_list = ["#2E7D32"] + ["#D32F2F" if v < 0 else "#1976D2" for v in values[1:-1]] + ["#2E7D32"]
+    colors_list = ["#2E7D32"] + ["#D32F2F" for _ in values[1:-1]] + ["#2E7D32"]
 
     positions = []
     heights = []
@@ -327,14 +306,21 @@ with col_viz1:
             bottoms.append(cum - (val if val > 0 else 0))
         positions.append(i)
 
-    ax.bar(positions, heights, bottom=bottoms, color=colors_list, edgecolor="black", linewidth=1, width=0.6)
+    bars = ax.bar(positions, heights, bottom=bottoms, color=colors_list, edgecolor="black", linewidth=1.5, width=0.65)
 
     ax.set_xticks(range(len(categories)))
-    ax.set_xticklabels(categories, fontsize=8, fontweight="bold", rotation=45, ha="right")
-    ax.set_ylabel("Power (Wp)", fontsize=10, fontweight="bold")
-    ax.set_title("Power Flow: Cell to Module", fontsize=11, fontweight="bold")
-    ax.grid(axis="y", alpha=0.3, linestyle="--")
-    ax.set_ylim(0, total_cell_power * 1.15)
+    ax.set_xticklabels(categories, fontsize=10, fontweight="bold", rotation=30, ha="right")
+    ax.set_ylabel("Power (Wp)", fontsize=11, fontweight="bold")
+    ax.set_title("Power Flow: Cell to Module", fontsize=13, fontweight="bold", pad=20)
+    ax.grid(axis="y", alpha=0.4, linestyle="--", linewidth=0.8)
+    ax.set_ylim(0, total_cell_power * 1.1)
+
+    for i, (bar, val) in enumerate(zip(bars, values)):
+        height = bar.get_height()
+        if i == 0 or i == len(values) - 1:
+            label_y = height / 2
+            ax.text(bar.get_x() + bar.get_width()/2, label_y, f"{height:.0f}W", 
+                   ha="center", va="center", fontsize=9, fontweight="bold", color="white")
 
     plt.tight_layout()
     st.pyplot(fig, use_container_width=True)
@@ -357,22 +343,34 @@ with col_viz2:
     if pie_sum > 0:
         pie_values_norm = [v/pie_sum * total_ctm_loss for v in pie_values]
 
-        fig2, ax2 = plt.subplots(figsize=(8, 5))
+        fig2, ax2 = plt.subplots(figsize=(10, 6))
+
+        # Create pie chart with improved visuals
+        colors_pie = ["#FF4444", "#FF8800", "#FFBB33", "#00CC44", "#FF1493", "#00CCFF", "#9966FF"]
         wedges, texts, autotexts = ax2.pie(
             pie_values_norm,
             labels=pie_labels,
             autopct="%1.1f%%",
-            colors=["#FF6B6B", "#FFA500", "#FFD700", "#4ECDC4", "#FF69B4", "#87CEEB", "#98D8C8"],
+            colors=colors_pie,
             startangle=90,
-            textprops={"fontsize": 9, "weight": "bold"}
+            textprops={"fontsize": 10, "weight": "bold"},
+            wedgeprops={"edgecolor": "black", "linewidth": 1.5},
+            explode=[0.05] * len(pie_labels)
         )
+
+        # Improve text positioning to avoid overlap
+        for text in texts:
+            text.set_fontsize(10)
+            text.set_weight("bold")
+            text.set_color("#000000")
 
         for autotext in autotexts:
             autotext.set_color("white")
-            autotext.set_fontsize(8)
+            autotext.set_fontsize(9)
             autotext.set_weight("bold")
+            autotext.set_bbox(dict(boxstyle="round,pad=0.3", facecolor="black", alpha=0.5))
 
-        ax2.set_title("CTM Loss Distribution", fontsize=11, fontweight="bold")
+        ax2.set_title("CTM Loss Distribution", fontsize=13, fontweight="bold", pad=20)
         plt.tight_layout()
         st.pyplot(fig2, use_container_width=True)
 
@@ -419,14 +417,14 @@ def create_pdf_report(total_cell_power, module_power, module_efficiency, df_loss
         fontSize=9,
         alignment=TA_JUSTIFY,
         spaceAfter=6,
-        textColor=colors.HexColor("#FF0000")
+        textColor=colors.HexColor("#CC0000")
     )
 
     story = []
 
     story.append(Paragraph("CELL-TO-MODULE (CTM) LOSS ANALYSIS REPORT", title_style))
     story.append(Spacer(1, 0.05*inch))
-    story.append(Paragraph("(DEMO REPORT - FOR REFERENCE ONLY)", disclaimer_style))
+    story.append(Paragraph("DEMO REPORT", heading_style))
     story.append(Spacer(1, 0.1*inch))
 
     company_text = "Luminous Power Technologies<br/>144 Half-Cut Cell TOPCon Module"
@@ -552,14 +550,14 @@ def create_pdf_report(total_cell_power, module_power, module_efficiency, df_loss
     ]))
 
     story.append(loss_table)
-    story.append(Spacer(1, 0.2*inch))
+    story.append(Spacer(1, 0.3*inch))
 
     story.append(PageBreak())
     story.append(Paragraph("DISCLAIMER", heading_style))
 
-    disclaimer_full = "<b>This is a DEMO REPORT for reference purposes only.</b><br/><br/>The values presented in this report are calculated based on typical industry parameters and may not represent exact values for specific modules. For accurate module specifications, please refer to the official product datasheet.<br/><br/>This report has been generated using the CTM Loss Calculator tool and is intended for educational and technical analysis purposes. Luminous Power Technologies makes no warranty regarding the accuracy of these calculations for production use."
+    disclaimer_full = "This is a DEMO REPORT for reference purposes only. This report has been generated using the CTM Loss Calculator tool and is intended for educational and technical understanding only."
 
-    story.append(Paragraph(disclaimer_full, body_style))
+    story.append(Paragraph(disclaimer_full, disclaimer_style))
 
     doc.build(story)
     buffer.seek(0)
@@ -597,7 +595,7 @@ st.markdown("---")
 st.markdown("""
 ---
 
-**CTM Loss Calculator** | Developed by Gokul Raam G | Senior Engineer - R&DX | **Luminous Power Technologies**
+**CTM Loss Calculator** | Developed by **Gokul Raam G Senior Engineer - R&DX** | **Luminous Power Technologies**
 
-*This tool is for educational and technical analysis purposes only.*
+*This tool is for educational and technical understanding only.*
 """)
