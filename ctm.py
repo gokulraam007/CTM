@@ -134,8 +134,6 @@ module_efficiency = (module_pmax / (module_area * 1000)) * 100
 
 # STEP 10: Calculate INTERDEPENDENT electrical parameters based on losses
 # Electrical parameters are interdependent with optical, resistive, and mismatch losses
-# Higher losses → Lower electrical parameters
-# Reference ratios from 590W baseline at 22.84% efficiency (low loss condition)
 
 # Loss-dependent scaling factors
 loss_factor = 1 - (total_ctm_loss / 100)  # Same as CTM ratio
@@ -279,68 +277,10 @@ st.dataframe(df_losses, use_container_width=True, hide_index=True)
 
 st.markdown("---")
 
-# VISUALIZATIONS
-col_viz1, col_viz2 = st.columns([1, 1])
+# VISUALIZATIONS - REMOVED WATERFALL CHART, ONLY PIE CHART
+col_viz = st.columns([1])[0]
 
-with col_viz1:
-    st.markdown("### Power Waterfall Chart")
-
-    fig, ax = plt.subplots(figsize=(10, 6))
-
-    categories = ["Cell", "Geom", "Glass", "Encap", "Ribbon", "Resistive", "Mismatch", "JB & Cable", "Module"]
-
-    values = [
-        total_cell_power,
-        -total_cell_power * geometric_loss/100,
-        -total_cell_power * glass_reflection_loss/100,
-        -total_cell_power * encapsulant_absorption_loss/100,
-        -total_cell_power * ribbon_shading_loss/100,
-        -total_cell_power * total_resistive_loss/100,
-        -total_cell_power * mismatch_loss/100,
-        -total_cell_power * jb_cable_loss/100,
-        module_pmax
-    ]
-
-    cumulative = [total_cell_power]
-    for i in range(1, len(values)-1):
-        cumulative.append(cumulative[-1] + values[i])
-    cumulative.append(module_pmax)
-
-    colors_list = ["#2E7D32"] + ["#D32F2F" for _ in values[1:-1]] + ["#2E7D32"]
-
-    positions = []
-    heights = []
-    bottoms = []
-
-    for i, (val, cum) in enumerate(zip(values, cumulative)):
-        if i == 0 or i == len(values) - 1:
-            heights.append(val)
-            bottoms.append(0)
-        else:
-            heights.append(abs(val))
-            bottoms.append(cum - (val if val > 0 else 0))
-        positions.append(i)
-
-    bars = ax.bar(positions, heights, bottom=bottoms, color=colors_list, edgecolor="black", linewidth=1.5, width=0.65)
-
-    ax.set_xticks(range(len(categories)))
-    ax.set_xticklabels(categories, fontsize=10, fontweight="bold", rotation=30, ha="right")
-    ax.set_ylabel("Power (Wp)", fontsize=11, fontweight="bold")
-    ax.set_title("Power Flow: Cell to Module", fontsize=13, fontweight="bold", pad=20)
-    ax.grid(axis="y", alpha=0.4, linestyle="--", linewidth=0.8)
-    ax.set_ylim(0, total_cell_power * 1.1)
-
-    for i, (bar, val) in enumerate(zip(bars, values)):
-        height = bar.get_height()
-        if i == 0 or i == len(values) - 1:
-            label_y = height / 2
-            ax.text(bar.get_x() + bar.get_width()/2, label_y, f"{height:.0f}W", 
-                   ha="center", va="center", fontsize=9, fontweight="bold", color="white")
-
-    plt.tight_layout()
-    st.pyplot(fig, use_container_width=True)
-
-with col_viz2:
+with col_viz:
     st.markdown("### Loss Distribution")
 
     pie_labels = ["Geometric", "Glass", "Encapsulant", "Ribbon Shading", "Resistive", "Mismatch", "JB & Cable"]
@@ -391,7 +331,7 @@ with col_viz2:
 
 st.markdown("---")
 
-# PDF REPORT GENERATION
+# PDF REPORT GENERATION - DATE/TIME AT DOWNLOAD TIME
 def create_pdf_report(total_cell_power, module_pmax, module_efficiency, df_losses, loss_values, total_ctm_loss, ctm_ratio, module_voc, module_isc, module_vmpp, module_impp, annual_energy_total, annual_energy_loss):
 
     buffer = BytesIO()
@@ -444,7 +384,10 @@ def create_pdf_report(total_cell_power, module_pmax, module_efficiency, df_losse
 
     company_text = "Luminous Power Technologies<br/>144 Half-Cut Cell TOPCon Module"
     story.append(Paragraph(company_text, body_style))
-    report_date = f"Report Generated: {datetime.now().strftime('%d %B %Y | %H:%M:%S IST')}"
+
+    # CURRENT DATE AND TIME AT REPORT GENERATION (DOWNLOAD TIME)
+    current_datetime = datetime.now()
+    report_date = f"Report Generated: {current_datetime.strftime('%d %B %Y | %H:%M:%S IST')}"
     story.append(Paragraph(report_date, body_style))
     story.append(Spacer(1, 0.2*inch))
 
