@@ -67,19 +67,29 @@ module_area = st.sidebar.number_input("Module Area (m²)", min_value=2.0, max_va
 cell_length = st.sidebar.number_input("Cell Length (mm)", min_value=180.0, max_value=185.0, value=182.2, step=0.1, help="Half-cut: 182.2mm")
 cell_width = st.sidebar.number_input("Cell Width (mm)", min_value=85.0, max_value=95.0, value=91.1, step=0.1, help="Half-cut: 91.1mm")
 
-st.sidebar.subheader("3. Optical Loss Parameters")
+st.sidebar.subheader("3. Module Power Output")
+module_pmax_input = st.sidebar.number_input("Module Pmax (Wp)", min_value=500.0, max_value=650.0, value=590.0, step=5.0, help="Module peak power")
+module_efficiency_input = st.sidebar.number_input("Module Efficiency (%)", min_value=20.0, max_value=24.0, value=22.84, step=0.1, help="Module efficiency at STC")
+
+st.sidebar.subheader("4. Module Electrical Parameters")
+module_voc_input = st.sidebar.number_input("Voc (V)", min_value=45.0, max_value=55.0, value=51.86, step=0.1, help="Open circuit voltage")
+module_isc_input = st.sidebar.number_input("Isc (A)", min_value=12.0, max_value=16.0, value=14.49, step=0.1, help="Short circuit current")
+module_vmpp_input = st.sidebar.number_input("Vmpp (V)", min_value=35.0, max_value=50.0, value=42.88, step=0.1, help="Voltage at MPP")
+module_impp_input = st.sidebar.number_input("Impp (A)", min_value=10.0, max_value=15.0, value=13.76, step=0.1, help="Current at MPP")
+
+st.sidebar.subheader("5. Optical Loss Parameters")
 glass_transmission = st.sidebar.slider("Glass Transmission (%)", 88.0, 96.0, 91.5, 0.5, help="AR-coated: 91.5%")
 eva_transmission = st.sidebar.slider("EVA Transmission (%)", 94.0, 98.0, 96.5, 0.5, help="UV-stable: 96.5%")
 
-st.sidebar.subheader("4. Resistive Loss Parameters")
+st.sidebar.subheader("6. Resistive Loss Parameters")
 num_busbars = st.sidebar.selectbox("Number of Busbars", [3, 5, 9, 12, 16], index=3, help="MBB: 12 busbars")
 ribbon_width = st.sidebar.number_input("Ribbon Width (mm)", min_value=0.8, max_value=2.5, value=1.5, step=0.1)
 ribbon_thickness = st.sidebar.number_input("Ribbon Thickness (mm)", min_value=0.15, max_value=0.35, value=0.25, step=0.05)
 
-st.sidebar.subheader("5. Mismatch Parameters")
+st.sidebar.subheader("7. Mismatch Parameters")
 cell_binning_tolerance = st.sidebar.slider("Cell Binning Tolerance (±%)", 0.0, 5.0, 1.5, 0.5, help="Tight sorting")
 
-st.sidebar.subheader("6. Additional Parameters")
+st.sidebar.subheader("8. Additional Parameters")
 junction_box_loss = st.sidebar.slider("Junction Box & Cable Loss (%)", 0.1, 2.0, 0.35, 0.1)
 annual_irradiance = st.sidebar.number_input("Annual Solar Irradiance (kWh/m²/year)", min_value=1000.0, max_value=2500.0, value=1500.0, step=50.0, help="Location specific")
 
@@ -88,13 +98,13 @@ annual_irradiance = st.sidebar.number_input("Annual Solar Irradiance (kWh/m²/ye
 cell_area_m2 = (cell_length * cell_width) / 1e6
 cell_area_cm2 = (cell_length * cell_width) / 100
 
-# FIXED ELECTRICAL PARAMETERS FROM DATASHEET
-module_pmax = 590.0  # Fixed module power
-module_voc = 51.86   # Fixed from datasheet
-module_vmpp = 42.88  # Fixed from datasheet
-module_isc = 14.49   # Fixed from datasheet
-module_impp = 13.76  # Fixed from datasheet
-module_efficiency_fixed = 22.84  # Fixed from datasheet
+# DYNAMIC ELECTRICAL PARAMETERS - Changes based on user input
+module_pmax = module_pmax_input
+module_efficiency = module_efficiency_input
+module_voc = module_voc_input
+module_isc = module_isc_input
+module_vmpp = module_vmpp_input
+module_impp = module_impp_input
 
 total_cell_power = cell_power * num_cells
 
@@ -124,22 +134,12 @@ mismatch_loss = 0.25 + (cell_binning_tolerance / 2.0) * 0.15
 
 jb_cable_loss = junction_box_loss
 
-# CALCULATE CTM LOSS SUCH THAT MODULE POWER = 590W
+# CALCULATE CTM LOSS BASED ON USER INPUT MODULE PMAX
 total_ctm_loss = ((total_cell_power - module_pmax) / total_cell_power) * 100
-total_ctm_loss = max(1.8, min(total_ctm_loss, 4.5))
-
-# Redistribute losses to match the calculated CTM loss
-# Keep geometric, optical, resistive, mismatch ratios, adjust jb_cable to match total
-loss_sum_without_jb = geometric_loss + net_optical_loss + total_resistive_loss + mismatch_loss
-jb_cable_loss_adjusted = total_ctm_loss - loss_sum_without_jb
-
-# Make sure jb_cable is positive
-if jb_cable_loss_adjusted < 0:
-    jb_cable_loss_adjusted = total_ctm_loss * 0.1
+total_ctm_loss = max(1.0, min(total_ctm_loss, 10.0))
 
 ctm_ratio = 1 - (total_ctm_loss / 100)
 module_power = total_cell_power * ctm_ratio
-module_efficiency = module_efficiency_fixed
 
 annual_energy_total = (module_pmax / 1000) * annual_irradiance
 annual_energy_loss = annual_energy_total * (total_ctm_loss / 100)
@@ -152,7 +152,7 @@ loss_values = {
     "coupling": optical_coupling_gain,
     "resistive": total_resistive_loss,
     "mismatch": mismatch_loss,
-    "jb": jb_cable_loss_adjusted
+    "jb": jb_cable_loss
 }
 
 # ====================== DISPLAY RESULTS ======================
@@ -178,7 +178,7 @@ with col4:
 
 st.markdown("---")
 
-st.markdown("## Module Electrical Parameters (STC)")
+st.markdown("## Module Electrical Parameters (STC) - DYNAMIC")
 
 col_elec1, col_elec2, col_elec3, col_elec4, col_elec5 = st.columns(5)
 
@@ -236,7 +236,7 @@ loss_data = {
         f"-{optical_coupling_gain:.2f}",
         f"{total_resistive_loss:.2f}",
         f"{mismatch_loss:.2f}",
-        f"{jb_cable_loss_adjusted:.2f}",
+        f"{jb_cable_loss:.2f}",
         f"{total_ctm_loss:.2f}"
     ],
     "Power Impact (W)": [
@@ -247,7 +247,7 @@ loss_data = {
         f"+{total_cell_power * optical_coupling_gain/100:.2f}",
         f"{-total_cell_power * total_resistive_loss/100:.2f}",
         f"{-total_cell_power * mismatch_loss/100:.2f}",
-        f"{-total_cell_power * jb_cable_loss_adjusted/100:.2f}",
+        f"{-total_cell_power * jb_cable_loss/100:.2f}",
         f"{-(total_cell_power - module_pmax):.2f}"
     ]
 }
@@ -275,7 +275,7 @@ with col_viz1:
         -total_cell_power * ribbon_shading_loss/100,
         -total_cell_power * total_resistive_loss/100,
         -total_cell_power * mismatch_loss/100,
-        -total_cell_power * jb_cable_loss_adjusted/100,
+        -total_cell_power * jb_cable_loss/100,
         module_pmax
     ]
 
@@ -321,7 +321,6 @@ with col_viz1:
 with col_viz2:
     st.markdown("### Loss Distribution")
 
-    # Filter out negative and very small values to avoid overlap issues
     pie_labels = ["Geometric", "Glass", "EVA", "Ribbon Shading", "Resistive", "Mismatch", "JB & Cable"]
     pie_values_raw = [
         max(0.01, geometric_loss),
@@ -330,19 +329,17 @@ with col_viz2:
         max(0.01, ribbon_shading_loss),
         max(0.01, total_resistive_loss),
         max(0.01, mismatch_loss),
-        max(0.01, jb_cable_loss_adjusted)
+        max(0.01, jb_cable_loss)
     ]
 
     pie_sum = sum(pie_values_raw)
     if pie_sum > 0:
-        # Normalize to total CTM loss
         pie_values = [v/pie_sum * total_ctm_loss for v in pie_values_raw]
 
         fig2, ax2 = plt.subplots(figsize=(10, 7))
 
         colors_pie = ["#FF4444", "#FF8800", "#FFBB33", "#00CC44", "#FF1493", "#00CCFF", "#9966FF"]
 
-        # Create pie chart with better spacing
         wedges, texts, autotexts = ax2.pie(
             pie_values,
             labels=pie_labels,
@@ -554,6 +551,14 @@ def create_pdf_report(total_cell_power, module_pmax, module_efficiency, df_losse
     disclaimer_full = "This is a DEMO REPORT for reference purposes only. This report has been generated using the CTM Loss Calculator tool and is intended for educational and technical understanding only."
 
     story.append(Paragraph(disclaimer_full, disclaimer_style))
+    story.append(Spacer(1, 0.3*inch))
+
+    # Footer signature
+    story.append(Paragraph("_" * 80, body_style))
+    story.append(Spacer(1, 0.1*inch))
+
+    signature_text = "<b>CTM Loss Calculator</b> | Developed by <b>Gokul Raam G</b> Senior Engineer - R&DX<br/><b>Luminous Power Technologies</b>"
+    story.append(Paragraph(signature_text, body_style))
 
     doc.build(story)
     buffer.seek(0)
@@ -591,7 +596,7 @@ st.markdown("---")
 st.markdown("""
 ---
 
-**CTM Loss Calculator** | Developed by **Gokul Raam G Senior Engineer - R&DX Luminous Power Technologies**
+**CTM Loss Calculator** | Developed by **Gokul Raam G** Senior Engineer - R&DX | **Luminous Power Technologies**
 
 *This tool is for educational and technical understanding only.*
 """)
