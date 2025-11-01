@@ -11,56 +11,93 @@ from reportlab.lib.units import inch
 from reportlab.platypus import SimpleDocTemplate, Table, TableStyle, Paragraph, Spacer, PageBreak
 from reportlab.lib.enums import TA_CENTER, TA_JUSTIFY
 
+# Configure page layout
 st.set_page_config(
     page_title="CTM Loss Calculator - EON TOPCon",
     layout="wide",
     initial_sidebar_state="expanded"
 )
 
+# Custom responsive styling
 st.markdown("""
 <style>
-    [data-testid="stMetricValue"] {
-        font-size: 28px;
-        font-weight: bold;
+    * {
+        margin: 0;
+        padding: 0;
+        box-sizing: border-box;
+    }
+
+    @media (max-width: 768px) {
+        .main {
+            padding: 10px;
+        }
+        .stMetric {
+            text-align: center;
+        }
+        [data-testid="stMetricValue"] {
+            font-size: 20px !important;
+        }
+    }
+
+    @media (min-width: 769px) {
+        [data-testid="stMetricValue"] {
+            font-size: 28px !important;
+            font-weight: bold;
+        }
+    }
+
+    .title-main {
+        text-align: center;
+        color: #1f77b4;
+    }
+
+    .metric-container {
+        display: flex;
+        flex-wrap: wrap;
+        justify-content: space-around;
+        gap: 10px;
     }
 </style>
 """, unsafe_allow_html=True)
 
-st.markdown("# Cell-to-Module (CTM) Loss Calculator")
-st.markdown("### EON TOPCon Technology | Luminous Power Technologies")
+# Title
+st.markdown("<h1 class='title-main'>Cell-to-Module (CTM) Loss Calculator</h1>", unsafe_allow_html=True)
+st.markdown("<h3 style='text-align: center; color: #555;'>EON TOPCon Technology | Luminous Power Technologies</h3>", unsafe_allow_html=True)
 
-st.sidebar.header("Configuration")
+# Sidebar configuration
+st.sidebar.header("Input Configuration")
 
-if st.sidebar.button("Reset to EON TOPCon Defaults"):
+if st.sidebar.button("Reset to EON TOPCon Defaults", use_container_width=True):
     st.session_state.reset = True
 
 st.sidebar.subheader("1. Solar Cell Parameters")
-cell_power = st.sidebar.number_input("Cell Power (Wp)", min_value=4.0, max_value=7.0, value=5.5, step=0.1, help="EON TOPCon typical: 5.5 Wp")
-cell_efficiency = st.sidebar.number_input("Cell Efficiency (%)", min_value=20.0, max_value=26.0, value=24.5, step=0.1, help="EON TOPCon: 24.5% (typical)")
+cell_power = st.sidebar.number_input("Cell Power (Wp)", min_value=4.0, max_value=7.0, value=5.5, step=0.1, help="EON TOPCon: 5.5 Wp")
+cell_efficiency = st.sidebar.number_input("Cell Efficiency (%)", min_value=20.0, max_value=26.0, value=24.5, step=0.1, help="EON TOPCon: 24.5%")
 num_cells = st.sidebar.number_input("Number of Cells", min_value=60, max_value=144, value=108, step=1, help="EON TOPCon: 108 cells")
 
 st.sidebar.subheader("2. Module Geometry")
 module_area = st.sidebar.number_input("Module Area (m²)", min_value=1.0, max_value=3.0, value=2.38, step=0.01, help="EON TOPCon: 2.38 m²")
-cell_area = st.sidebar.number_input("Cell Area (cm²)", min_value=200.0, max_value=300.0, value=274.5, step=0.5, help="M10 cells: 274.5 cm²")
+cell_area = st.sidebar.number_input("Cell Area (cm²)", min_value=200.0, max_value=300.0, value=274.5, step=0.5, help="M10: 274.5 cm²")
 
 total_cell_area = (num_cells * cell_area) / 10000
 inactive_area_fraction = 1 - (total_cell_area / module_area)
 
 st.sidebar.subheader("3. Optical Loss Parameters")
-glass_transmission = st.sidebar.slider("Glass Transmission (%)", 88.0, 96.0, 91.5, 0.5, help="EON: 91.5% (standard)")
-eva_transmission = st.sidebar.slider("EVA Transmission (%)", 94.0, 98.0, 96.5, 0.5, help="EON: 96.5% (UV-stable)")
+glass_transmission = st.sidebar.slider("Glass Transmission (%)", 88.0, 96.0, 91.5, 0.5, help="Standard: 91.5%")
+eva_transmission = st.sidebar.slider("EVA Transmission (%)", 94.0, 98.0, 96.5, 0.5, help="UV-stable: 96.5%")
 
 st.sidebar.subheader("4. Resistive Loss Parameters")
-num_busbars = st.sidebar.selectbox("Number of Busbars", [3, 5, 9, 12, 16], index=2, help="EON: 9 busbars (MBB)")
+num_busbars = st.sidebar.selectbox("Number of Busbars", [3, 5, 9, 12, 16], index=2, help="MBB: 9 busbars")
 ribbon_width = st.sidebar.number_input("Ribbon Width (mm)", min_value=0.8, max_value=2.5, value=1.5, step=0.1)
 ribbon_thickness = st.sidebar.number_input("Ribbon Thickness (mm)", min_value=0.15, max_value=0.35, value=0.25, step=0.05)
 
 st.sidebar.subheader("5. Mismatch Parameters")
-cell_binning_tolerance = st.sidebar.slider("Cell Binning Tolerance (±%)", 0.0, 5.0, 2.0, 0.5, help="EON: ±2.0% (tight sorting)")
+cell_binning_tolerance = st.sidebar.slider("Cell Binning Tolerance (±%)", 0.0, 5.0, 2.0, 0.5, help="Tight: 2.0%")
 
 st.sidebar.subheader("6. Additional Parameters")
 junction_box_loss = st.sidebar.slider("Junction Box & Cable Loss (%)", 0.1, 2.0, 0.5, 0.1)
 
+# CALCULATIONS
 geometric_loss = inactive_area_fraction * 100
 
 glass_reflection_loss = (1 - glass_transmission/100) * 100
@@ -85,24 +122,30 @@ jb_cable_loss = junction_box_loss
 
 total_ctm_loss = geometric_loss + net_optical_loss + total_resistive_loss + mismatch_loss + jb_cable_loss
 
+# Ensure positive values
+total_ctm_loss = max(0, min(total_ctm_loss, 100))
+
 total_cell_power = cell_power * num_cells
-ctm_ratio = 1 - (total_ctm_loss / 100)
+ctm_ratio = max(0, 1 - (total_ctm_loss / 100))
 module_power = total_cell_power * ctm_ratio
 module_efficiency = (module_power / (module_area * 1000)) * 100
 
+# DISPLAY RESULTS
 st.markdown("---")
 st.markdown("## Key Results")
 
 col1, col2, col3, col4 = st.columns(4)
 
 with col1:
-    st.metric("Cell Power", f"{total_cell_power:.0f} Wp", "")
+    st.metric("Cell Power", f"{total_cell_power:.0f} Wp")
 
 with col2:
-    st.metric("Module Power", f"{module_power:.1f} Wp", f"{module_power - total_cell_power:.1f} W")
+    power_delta = module_power - total_cell_power
+    st.metric("Module Power", f"{module_power:.1f} Wp", f"{power_delta:.1f} W")
 
 with col3:
-    st.metric("Module Efficiency", f"{module_efficiency:.2f}%", f"{module_efficiency - cell_efficiency:.2f}%")
+    eff_delta = module_efficiency - cell_efficiency
+    st.metric("Module Efficiency", f"{module_efficiency:.2f}%", f"{eff_delta:.2f}%")
 
 with col4:
     st.metric("CTM Ratio", f"{ctm_ratio*100:.2f}%", f"-{total_ctm_loss:.2f}%")
@@ -113,17 +156,17 @@ st.markdown("## Loss Breakdown Analysis")
 
 loss_data = {
     "Loss Category": [
-        "Geometric (Inactive Area)",
-        "Optical - Glass Reflection",
-        "Optical - EVA Absorption",
-        "Optical - Ribbon Shading",
-        "Optical Coupling Gain",
-        "Resistive (Cell + Ribbon)",
-        "Mismatch (Binning)",
-        "Junction Box & Cables",
+        "Geometric",
+        "Glass Reflection",
+        "EVA Absorption",
+        "Ribbon Shading",
+        "Coupling Gain",
+        "Resistive",
+        "Mismatch",
+        "JB & Cable",
         "TOTAL CTM LOSS"
     ],
-    "Loss Value (%)": [
+    "Loss (%)": [
         f"{geometric_loss:.2f}",
         f"{glass_reflection_loss:.2f}",
         f"{eva_absorption_loss:.2f}",
@@ -152,14 +195,15 @@ st.dataframe(df_losses, use_container_width=True, hide_index=True)
 
 st.markdown("---")
 
-col_viz1, col_viz2 = st.columns(2)
+# VISUALIZATIONS
+col_viz1, col_viz2 = st.columns([1, 1])
 
 with col_viz1:
-    st.markdown("### CTM Loss Waterfall Chart")
+    st.markdown("### Waterfall Chart")
 
-    fig, ax = plt.subplots(figsize=(10, 6))
+    fig, ax = plt.subplots(figsize=(8, 5))
 
-    categories = ["Cell Power", "Geometric", "Glass", "EVA", "Ribbon Shade", "Coupling Gain", "Resistive", "Mismatch", "JB & Cable", "Module Power"]
+    categories = ["Cell", "Geom", "Glass", "EVA", "Ribbon", "Gain", "Resist", "Match", "JB", "Module"]
 
     values = [
         total_cell_power,
@@ -194,51 +238,59 @@ with col_viz1:
             bottoms.append(cum - (val if val > 0 else 0))
         positions.append(i)
 
-    bars = ax.bar(positions, heights, bottom=bottoms, color=colors_list, edgecolor="black", linewidth=1.2, width=0.6)
+    ax.bar(positions, heights, bottom=bottoms, color=colors_list, edgecolor="black", linewidth=1, width=0.6)
 
     ax.set_xticks(range(len(categories)))
-    ax.set_xticklabels(categories, fontsize=9, fontweight="bold", rotation=45, ha="right")
-    ax.set_ylabel("Power (Wp)", fontsize=11, fontweight="bold")
-    ax.set_title("Power Waterfall: Cell to Module", fontsize=12, fontweight="bold")
+    ax.set_xticklabels(categories, fontsize=8, fontweight="bold", rotation=45, ha="right")
+    ax.set_ylabel("Power (Wp)", fontsize=10, fontweight="bold")
+    ax.set_title("Power Flow: Cell to Module", fontsize=11, fontweight="bold")
     ax.grid(axis="y", alpha=0.3, linestyle="--")
-    ax.set_ylim(0, total_cell_power * 1.1)
-
-    for i, bar in enumerate(bars):
-        height = bar.get_height()
-        if height > 0:
-            ax.text(bar.get_x() + bar.get_width()/2, bar.get_y() + height/2, f"{height:.0f}W", ha="center", va="center", fontsize=8, fontweight="bold", color="white")
+    ax.set_ylim(0, total_cell_power * 1.15)
 
     plt.tight_layout()
-    st.pyplot(fig)
+    st.pyplot(fig, use_container_width=True)
 
 with col_viz2:
-    st.markdown("### Loss Distribution (Pie Chart)")
+    st.markdown("### Loss Distribution")
 
-    pie_labels = ["Geometric", "Glass", "EVA", "Ribbon Shade", "Resistive", "Mismatch", "JB & Cable"]
+    # FIXED: Filter out negative values (coupling gain) and ensure all values are positive
+    pie_labels = ["Geometric", "Glass", "EVA", "Ribbon", "Resistive", "Mismatch", "JB & Cable"]
     pie_values = [
-        geometric_loss,
-        glass_reflection_loss,
-        eva_absorption_loss,
-        ribbon_shading_loss,
-        total_resistive_loss,
-        mismatch_loss,
-        jb_cable_loss
+        max(0, geometric_loss),
+        max(0, glass_reflection_loss),
+        max(0, eva_absorption_loss),
+        max(0, ribbon_shading_loss),
+        max(0, total_resistive_loss),
+        max(0, mismatch_loss),
+        max(0, jb_cable_loss)
     ]
 
-    fig2, ax2 = plt.subplots(figsize=(10, 6))
-    wedges, texts, autotexts = ax2.pie(pie_values, labels=pie_labels, autopct="%1.1f%%", colors=["#FF6B6B", "#FFA500", "#FFD700", "#4ECDC4", "#FF69B4", "#87CEEB", "#98D8C8"], startangle=90, textprops={"fontsize": 10, "weight": "bold"})
+    # Only create pie chart if all values are positive and sum > 0
+    if sum(pie_values) > 0 and all(v >= 0 for v in pie_values):
+        fig2, ax2 = plt.subplots(figsize=(8, 5))
+        wedges, texts, autotexts = ax2.pie(
+            pie_values,
+            labels=pie_labels,
+            autopct="%1.1f%%",
+            colors=["#FF6B6B", "#FFA500", "#FFD700", "#4ECDC4", "#FF69B4", "#87CEEB", "#98D8C8"],
+            startangle=90,
+            textprops={"fontsize": 9, "weight": "bold"}
+        )
 
-    for autotext in autotexts:
-        autotext.set_color("white")
-        autotext.set_fontsize(9)
-        autotext.set_weight("bold")
+        for autotext in autotexts:
+            autotext.set_color("white")
+            autotext.set_fontsize(8)
+            autotext.set_weight("bold")
 
-    ax2.set_title("Total CTM Loss Distribution", fontsize=12, fontweight="bold")
-    plt.tight_layout()
-    st.pyplot(fig2)
+        ax2.set_title("CTM Loss Distribution", fontsize=11, fontweight="bold")
+        plt.tight_layout()
+        st.pyplot(fig2, use_container_width=True)
+    else:
+        st.warning("Unable to display pie chart - check input values")
 
 st.markdown("---")
 
+# PDF REPORT GENERATION
 def create_pdf_report(total_cell_power, module_power, module_efficiency, df_losses, geometric_loss, glass_reflection_loss, eva_absorption_loss, ribbon_shading_loss, optical_coupling_gain, total_resistive_loss, mismatch_loss, jb_cable_loss, total_ctm_loss, ctm_ratio):
 
     buffer = BytesIO()
@@ -285,7 +337,7 @@ def create_pdf_report(total_cell_power, module_power, module_efficiency, df_loss
     story.append(Spacer(1, 0.2*inch))
 
     story.append(Paragraph("EXECUTIVE SUMMARY", heading_style))
-    summary_text = f"This report presents a detailed Cell-to-Module (CTM) loss analysis for EON TOPCon solar modules. The analysis identifies and quantifies all loss mechanisms between the individual solar cell efficiency and the final module efficiency. Total CTM loss: <b>{total_ctm_loss:.2f}%</b>, resulting in module power of <b>{module_power:.1f} Wp</b> from cell power of <b>{total_cell_power:.0f} Wp</b>."
+    summary_text = f"This report presents a detailed Cell-to-Module (CTM) loss analysis for EON TOPCon solar modules. Total CTM loss: <b>{total_ctm_loss:.2f}%</b>, resulting in module power of <b>{module_power:.1f} Wp</b> from cell power of <b>{total_cell_power:.0f} Wp</b>."
     story.append(Paragraph(summary_text, body_style))
     story.append(Spacer(1, 0.15*inch))
 
@@ -376,7 +428,7 @@ st.markdown("## Download Report")
 col_download1, col_download2 = st.columns([1, 1])
 
 with col_download1:
-    if st.button("Generate PDF Report", key="generate_pdf", use_container_width=True):
+    if st.button("Generate PDF Report", use_container_width=True):
         pdf_buffer = create_pdf_report(total_cell_power, module_power, module_efficiency, df_losses, geometric_loss, glass_reflection_loss, eva_absorption_loss, ribbon_shading_loss, optical_coupling_gain, total_resistive_loss, mismatch_loss, jb_cable_loss, total_ctm_loss, ctm_ratio)
 
         st.download_button(
