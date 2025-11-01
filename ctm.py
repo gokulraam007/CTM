@@ -591,7 +591,7 @@ st.markdown("---")
 st.markdown("""
 ---
 
-**CTM Loss Calculator** | Luminous Power Technologies
+**CTM Loss Calculator** | Developed by **Gokul Raam G Senior Engineer - R&DX Luminous Power Technologies**
 
 *This tool is for educational and technical understanding only.*
 """)
