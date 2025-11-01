@@ -3,3 +3,4 @@ fpdf
 matplotlib
 pandas
 numpy
+reportlab
